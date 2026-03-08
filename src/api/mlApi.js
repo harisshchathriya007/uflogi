@@ -40,7 +40,15 @@ export async function fetchExampleTripCost() {
 }
 
 export async function fetchConsolidationDashboard() {
-  const response = await fetch('/api/consolidation/dashboard')
-  return parseApiResponse(response)
+  const endpoints = ['/api/consolidation/dashboard', '/api/consolidation-dashboard']
+  let lastError = null
+  for (const endpoint of endpoints) {
+    try {
+      const response = await fetch(endpoint)
+      return await parseApiResponse(response)
+    } catch (error) {
+      lastError = error
+    }
+  }
+  throw lastError || new Error('Failed to fetch consolidation dashboard.')
 }
-
