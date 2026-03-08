@@ -9,6 +9,7 @@ function isMissingResourceError(error) {
 }
 
 async function queryFirstTable(tableNames, queryBuilder) {
+  if (!supabase) return { data: null, table: null, error: new Error('Supabase unavailable') }
   let firstNonMissingError = null
   let lastError = null
   for (const tableName of tableNames) {
@@ -21,6 +22,7 @@ async function queryFirstTable(tableNames, queryBuilder) {
 }
 
 async function mutateFirstTable(tableNames, mutateBuilder) {
+  if (!supabase) return { data: null, table: null, error: new Error('Supabase unavailable') }
   let firstNonMissingError = null
   let lastError = null
   for (const tableName of tableNames) {
@@ -65,6 +67,7 @@ export async function updateOrder(orderId, patch) {
 }
 
 export async function upsertCompletedDelivery(order) {
+  if (!supabase) return
   const orderKey = order?.id ?? order?.order_id
   if (!orderKey) return
   await supabase.from('completed_deliveries').upsert({
@@ -99,17 +102,41 @@ export async function computeRouteDistanceKm(order) {
 }
 
 export async function triggerDriverSos(email) {
-  if (!email) return false
-  const payload = {
+  if (!supabase || !email) return false
+  const exists = await queryFirstTable(['drivers', 'Driver'], (table) =>
+    table
+      .select('id')
+      .eq('email', email)
+      .limit(1),
+  )
+  if (exists.error || (exists.data || []).length === 0) return false
+
+  const tableName = exists.table || 'drivers'
+  const basePayload = {
     sos_active: true,
     status: 'sos',
     last_location_updated_at: new Date().toISOString(),
   }
-  const { error } = await supabase.from('drivers').update(payload).eq('email', email)
-  return !error
+  let activeColumns = Object.keys(basePayload)
+  let writeError = null
+  for (let attempt = 0; attempt < 6; attempt += 1) {
+    const payload = {}
+    activeColumns.forEach((column) => {
+      payload[column] = basePayload[column]
+    })
+    const { error } = await supabase.from(tableName).update(payload).eq('email', email)
+    writeError = error
+    if (!writeError) return true
+    const missingColumn = extractMissingColumnName(writeError.message)
+    if (!missingColumn || !activeColumns.includes(missingColumn)) break
+    activeColumns = activeColumns.filter((column) => column !== missingColumn)
+    if (activeColumns.length === 0) break
+  }
+  return false
 }
 
 export async function fetchCompletedForDriver(email) {
+  if (!supabase) return []
   const { data, error } = await supabase
     .from('completed_deliveries')
     .select('*')
@@ -129,6 +156,7 @@ export async function fetchCompletedForDriver(email) {
 }
 
 export function subscribeCompletedRealtime(email, onChange) {
+  if (!supabase) return null
   const normalizedEmail = String(email || '').toLowerCase()
   return supabase
     .channel(`completed-realtime-${normalizedEmail}`)
@@ -147,10 +175,11 @@ export function subscribeCompletedRealtime(email, onChange) {
 }
 
 export function removeRealtimeChannel(channel) {
-  if (channel) supabase.removeChannel(channel)
+  if (channel && supabase) supabase.removeChannel(channel)
 }
 
 export function subscribeOrdersRealtime(onChange) {
+  if (!supabase) return null
   return supabase
     .channel('orders-realtime')
     .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, onChange)
@@ -159,6 +188,7 @@ export function subscribeOrdersRealtime(onChange) {
 }
 
 export function subscribeDriversRealtime(onChange) {
+  if (!supabase) return null
   return supabase
     .channel('drivers-realtime')
     .on('postgres_changes', { event: '*', schema: 'public', table: 'drivers' }, onChange)
@@ -182,6 +212,7 @@ export function extractMissingColumnName(message) {
 }
 
 export async function registerDriverAdaptive(basePayload) {
+  if (!supabase) return { ok: false }
   const tableCandidates = ['drivers', 'Driver']
   for (const tableName of tableCandidates) {
     let activeColumns = Object.keys(basePayload)
@@ -292,6 +323,8 @@ function toDbOrderPayload(row) {
 }
 
 export async function importOrdersAdaptive(normalizedRows) {
+  if (!supabase) return { ok: false, error: new Error('Supabase unavailable') }
+  if (!normalizedRows || normalizedRows.length === 0) return { ok: false, error: new Error('No rows to import') }
   const dbRows = normalizedRows.map((row) => toDbOrderPayload(row))
   const tableCandidates = ['orders', 'Orders']
   let lastError = null

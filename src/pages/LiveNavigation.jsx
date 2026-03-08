@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { useLocation } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import GlassCard from '../components/GlassCard'
 import PageBackButton from '../components/PageBackButton'
 import { ACTIVE_ORDER_KEY } from '../lib/session'
 import { fetchOrderById, removeRealtimeChannel, subscribeOrdersRealtime } from '../lib/dataService'
 import { loadGoogleMaps } from '../lib/maps'
+import { getStoredUser } from '../lib/session'
 
 function getNumber(value) {
   const parsed = Number(value)
@@ -24,6 +25,7 @@ function getCurrentPositionOrNull() {
 
 export default function LiveNavigation() {
   const location = useLocation()
+  const navigate = useNavigate()
   const mapRef = useRef(null)
   const [order, setOrder] = useState(null)
   const [distanceKm, setDistanceKm] = useState(0)
@@ -34,6 +36,11 @@ export default function LiveNavigation() {
   const [mapError, setMapError] = useState('')
 
   const orderId = useMemo(() => location.state?.orderId || localStorage.getItem(ACTIVE_ORDER_KEY), [location.state])
+  const user = useMemo(() => getStoredUser(), [])
+
+  useEffect(() => {
+    if (!user?.email) navigate('/driver-login')
+  }, [navigate, user?.email])
 
   useEffect(() => {
     const loadOrder = async () => {

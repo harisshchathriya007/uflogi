@@ -67,6 +67,38 @@ function runPredictScript(orderPayload) {
   });
 }
 
+function toNumber(value, fallback = 0) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function fallbackPredictCost(orderPayload) {
+  const distanceKm = toNumber(orderPayload.distance_km, 0);
+  const weight = toNumber(orderPayload.weight, 0);
+  const volume = toNumber(orderPayload.volume, 0);
+  const priorityNum = toNumber(orderPayload.priority_num, 1);
+  const fuelUsed = toNumber(orderPayload.fuel_used, 0);
+  const timeRemainingHr = toNumber(orderPayload.time_remaining_hr, 0);
+
+  const baseFare = 45;
+  const distanceCost = distanceKm * 9.5;
+  const weightCost = weight * 0.22;
+  const volumeCost = volume * 11;
+  const fuelCost = fuelUsed * 80;
+  const urgencyCost = Math.max(0, priorityNum - 1) * 35;
+  const deadlineFactor = timeRemainingHr > 0 ? Math.max(0, (6 - timeRemainingHr) * 6) : 0;
+
+  const raw = baseFare + distanceCost + weightCost + volumeCost + fuelCost + urgencyCost + deadlineFactor;
+  const predictedCost = Number(Math.max(raw, baseFare).toFixed(2));
+
+  return {
+    predicted_cost: predictedCost,
+    currency: "INR",
+    model: "js-fallback",
+    note: "Python runtime unavailable in current deployment. Using fallback estimator.",
+  };
+}
+
 export async function predictCost(req, res) {
   try {
     const orderData = req.body;
@@ -74,7 +106,20 @@ export async function predictCost(req, res) {
       return res.status(400).json({ error: "Request body must be a JSON object." });
     }
 
-    const prediction = await runPredictScript(orderData);
+    const isVercel = process.env.VERCEL === "1";
+    const forceFallback = process.env.ML_FALLBACK_ONLY === "1";
+    const useFallbackByDefault = isVercel && process.env.ENABLE_PYTHON_ON_VERCEL !== "1";
+
+    let prediction;
+    if (forceFallback || useFallbackByDefault) {
+      prediction = fallbackPredictCost(orderData);
+    } else {
+      try {
+        prediction = await runPredictScript(orderData);
+      } catch (_error) {
+        prediction = fallbackPredictCost(orderData);
+      }
+    }
 
     if (prediction.error) {
       return res.status(400).json({ error: prediction.error });

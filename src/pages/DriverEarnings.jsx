@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import GlassCard from '../components/GlassCard'
 import StatCard from '../components/StatCard'
 import PageBackButton from '../components/PageBackButton'
@@ -6,16 +7,20 @@ import { fetchCompletedForDriver, removeRealtimeChannel, subscribeCompletedRealt
 import { getStoredUser } from '../lib/session'
 
 export default function DriverEarnings() {
+  const navigate = useNavigate()
   const user = useMemo(() => getStoredUser(), [])
   const [items, setItems] = useState([])
 
   useEffect(() => {
-    if (!user?.email) return
+    if (!user?.email) {
+      navigate('/driver-login')
+      return undefined
+    }
     const load = async () => setItems(await fetchCompletedForDriver(user.email))
     load()
     const channel = subscribeCompletedRealtime(user.email, load)
     return () => removeRealtimeChannel(channel)
-  }, [])
+  }, [navigate, user?.email])
 
   const today = new Date().toDateString()
   const todaySum = items.filter((i) => new Date(i.completed_at || Date.now()).toDateString() === today).reduce((s, i) => s + Number(i.earnings || 0), 0)

@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import GlassCard from '../components/GlassCard'
 import StatCard from '../components/StatCard'
 import PageBackButton from '../components/PageBackButton'
 import { fetchConsolidationDashboard } from '../api/mlApi'
 import { loadGoogleMaps } from '../lib/maps'
+import { getStoredOperator } from '../lib/session'
 
 function formatNumber(value, suffix = '') {
   const num = Number(value)
@@ -12,6 +14,8 @@ function formatNumber(value, suffix = '') {
 }
 
 export default function LoadConsolidation() {
+  const navigate = useNavigate()
+  const operator = useMemo(() => getStoredOperator(), [])
   const [data, setData] = useState(null)
   const [error, setError] = useState('')
   const [selectedClusterId, setSelectedClusterId] = useState(null)
@@ -19,6 +23,10 @@ export default function LoadConsolidation() {
   const mapRef = useRef(null)
 
   useEffect(() => {
+    if (!operator?.email) {
+      navigate('/operator-login')
+      return undefined
+    }
     let mounted = true
     const load = async () => {
       try {
@@ -38,7 +46,7 @@ export default function LoadConsolidation() {
       mounted = false
       clearInterval(timer)
     }
-  }, [])
+  }, [navigate, operator?.email])
 
   const summary = data?.summary || {}
   const analytics = data?.analytics || {}

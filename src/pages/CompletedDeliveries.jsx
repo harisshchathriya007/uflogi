@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import GlassCard from '../components/GlassCard'
 import PageBackButton from '../components/PageBackButton'
 import { fetchCompletedForDriver, removeRealtimeChannel, subscribeCompletedRealtime } from '../lib/dataService'
@@ -11,16 +12,20 @@ function getDayKey(date) {
 }
 
 export default function CompletedDeliveries() {
+  const navigate = useNavigate()
   const user = useMemo(() => getStoredUser(), [])
   const [items, setItems] = useState([])
 
   useEffect(() => {
-    if (!user?.email) return undefined
+    if (!user?.email) {
+      navigate('/driver-login')
+      return undefined
+    }
     const load = async () => setItems(await fetchCompletedForDriver(user.email))
     load()
     const channel = subscribeCompletedRealtime(user.email, load)
     return () => removeRealtimeChannel(channel)
-  }, [])
+  }, [navigate, user?.email])
 
   const chartData = useMemo(() => {
     const days = []

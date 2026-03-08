@@ -12,6 +12,10 @@ export default function TodayJob() {
   const activeStatuses = ['assigned', 'in_progress', 'in-transit', 'in_transit', 'in transit', 'active', 'enroute']
 
   useEffect(() => {
+    if (!user?.email) {
+      navigate('/driver-login')
+      return undefined
+    }
     const load = async () => {
       const orders = await fetchOrders({})
       const email = String(user?.email || '').toLowerCase()
@@ -21,7 +25,7 @@ export default function TodayJob() {
     load()
     const channel = subscribeOrdersRealtime(load)
     return () => removeRealtimeChannel(channel)
-  }, [])
+  }, [navigate, user?.email])
 
   const startTrip = async () => {
     if (!active) return

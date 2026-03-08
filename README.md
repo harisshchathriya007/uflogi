@@ -1,73 +1,48 @@
-# React + TypeScript + Vite
+# UrbanFlow
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+UrbanFlow is a React + Vite logistics platform with driver/operator dashboards and API routes for ML/consolidation endpoints.
 
-Currently, two official plugins are available:
+## Local Development
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+1. Install dependencies:
+   - `npm install`
+2. Create local env:
+   - copy `.env.example` to `.env`
+   - fill required vars
+3. Run frontend:
+   - `npm run dev`
+4. Optional backend (local Express):
+   - `npm run server`
 
-## React Compiler
+## Vercel Deployment
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+This repo is prepared for Vercel with:
+- SPA routing rewrite (`vercel.json`)
+- Serverless API entrypoint (`api/index.js`) that mounts existing Express routes
 
-## Expanding the ESLint configuration
+### Vercel Project Settings
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+- Framework Preset: `Vite`
+- Build Command: `npm run build`
+- Output Directory: `dist`
+- Install Command: `npm install`
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+### Required Environment Variables (Vercel)
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
+- `VITE_SUPABASE_URL`
+- `VITE_SUPABASE_ANON_KEY`
+- `VITE_GOOGLE_MAPS_API_KEY`
 
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
+Optional:
+- `VITE_GOOGLE_MAP_ID`
+- `SUPABASE_URL` (backend override)
+- `SUPABASE_ANON_KEY` (backend override)
+- `PYTHON_BIN` (only if using Python-backed prediction endpoint)
+- `ML_FALLBACK_ONLY` (`1` to always use JS fallback estimator for `/api/predict-cost`)
+- `ENABLE_PYTHON_ON_VERCEL` (`1` to try Python on Vercel; default is JS fallback)
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+## Notes
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
+- Frontend calls `/api/*` are routed to the serverless function via `vercel.json`.
+- Client-side routes are rewritten to `index.html`, so direct navigation to nested routes works.
+- On Vercel, `/api/predict-cost` now uses a JS fallback estimator by default to avoid Python runtime failures.

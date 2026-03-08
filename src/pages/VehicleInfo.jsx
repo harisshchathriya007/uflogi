@@ -1,14 +1,20 @@
 import { useEffect, useMemo, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import GlassCard from '../components/GlassCard'
 import PageBackButton from '../components/PageBackButton'
 import { getStoredUser } from '../lib/session'
 import { fetchDrivers, removeRealtimeChannel, subscribeDriversRealtime } from '../lib/dataService'
 
 export default function VehicleInfo() {
+  const navigate = useNavigate()
   const user = useMemo(() => getStoredUser(), [])
   const [driver, setDriver] = useState(null)
 
   useEffect(() => {
+    if (!user?.email) {
+      navigate('/driver-login')
+      return undefined
+    }
     const load = async () => {
       if (!user?.email) return
       const drivers = await fetchDrivers()
@@ -18,7 +24,7 @@ export default function VehicleInfo() {
     load()
     const channel = subscribeDriversRealtime(load)
     return () => removeRealtimeChannel(channel)
-  }, [])
+  }, [navigate, user?.email])
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-900 via-blue-700 to-teal-500 p-6">

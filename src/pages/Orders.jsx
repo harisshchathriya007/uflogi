@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import * as XLSX from 'xlsx'
 import GlassCard from '../components/GlassCard'
 import PageBackButton from '../components/PageBackButton'
+import { getStoredOperator } from '../lib/session'
 import {
   fetchOrders,
   importOrdersAdaptive,
@@ -12,17 +14,23 @@ import {
 } from '../lib/dataService'
 
 export default function Orders() {
+  const navigate = useNavigate()
   const fileRef = useRef(null)
   const [items, setItems] = useState([])
   const [previewRows, setPreviewRows] = useState([])
   const [message, setMessage] = useState('')
 
   useEffect(() => {
+    const operator = getStoredOperator()
+    if (!operator?.email) {
+      navigate('/operator-login')
+      return undefined
+    }
     const load = () => fetchOrders({}).then(setItems)
     load()
     const channel = subscribeOrdersRealtime(load)
     return () => removeRealtimeChannel(channel)
-  }, [])
+  }, [navigate])
 
   const onImportClick = () => fileRef.current?.click()
 

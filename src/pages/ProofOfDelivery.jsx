@@ -2,13 +2,14 @@ import { useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import GlassCard from '../components/GlassCard'
 import PageBackButton from '../components/PageBackButton'
-import { ACTIVE_ORDER_KEY } from '../lib/session'
+import { ACTIVE_ORDER_KEY, getStoredUser } from '../lib/session'
 import { fetchOrderById, upsertCompletedDelivery, updateOrder } from '../lib/dataService'
 import { supabase } from '../lib/supabaseClient'
 
 export default function ProofOfDelivery() {
   const location = useLocation()
   const navigate = useNavigate()
+  const user = getStoredUser()
   const fileRef = useRef(null)
   const [otp, setOtp] = useState('')
   const [notes, setNotes] = useState('')
@@ -18,13 +19,17 @@ export default function ProofOfDelivery() {
   const [status, setStatus] = useState('')
 
   useEffect(() => {
+    if (!user?.email) {
+      navigate('/driver-login')
+      return
+    }
     const load = async () => {
       const id = location.state?.orderId || localStorage.getItem(ACTIVE_ORDER_KEY)
       if (!id) return
       setOrder(await fetchOrderById(id))
     }
     load()
-  }, [location.state])
+  }, [location.state, navigate, user?.email])
 
   const onPickPhoto = () => fileRef.current?.click()
 

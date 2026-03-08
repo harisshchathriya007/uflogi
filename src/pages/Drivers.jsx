@@ -1,9 +1,12 @@
 import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import GlassCard from '../components/GlassCard'
 import PageBackButton from '../components/PageBackButton'
 import { fetchDrivers, registerDriverAdaptive, removeRealtimeChannel, subscribeDriversRealtime } from '../lib/dataService'
+import { getStoredOperator } from '../lib/session'
 
 export default function Drivers() {
+  const navigate = useNavigate()
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -13,11 +16,16 @@ export default function Drivers() {
   const [items, setItems] = useState([])
 
   useEffect(() => {
+    const operator = getStoredOperator()
+    if (!operator?.email) {
+      navigate('/operator-login')
+      return undefined
+    }
     const load = () => fetchDrivers().then(setItems)
     load()
     const channel = subscribeDriversRealtime(load)
     return () => removeRealtimeChannel(channel)
-  }, [])
+  }, [navigate])
 
   const register = async () => {
     if (!name || !email || !vehicleType || !contactNo) {
