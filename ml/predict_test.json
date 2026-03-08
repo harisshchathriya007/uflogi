@@ -1,0 +1,12 @@
+{
+"weight": 12,
+"volume": 1.5,
+"pickup_latitude": 13.0827,
+"pickup_longitude": 80.2707,
+"delivery_latitude": 13.0674,
+"delivery_longitude": 80.2376,
+"priority": "High",
+"created_at": "2026-03-07T10:00:00",
+"delivery_deadline": "2026-03-07T14:00:00",
+"mileage": 14
+}
