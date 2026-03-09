@@ -1,4 +1,4 @@
-import { buildApiUrl } from '../config/api'
+import API_BASE_URL, { buildApiUrl } from '../config/api'
 
 async function fetchApi(input, init) {
   try {
@@ -23,7 +23,7 @@ async function parseApiResponse(response) {
         throw new Error('Backend API is unavailable. Start `npm.cmd run server` on port 5000.')
       }
       if (raw.trim().startsWith('<')) {
-        throw new Error(`Backend request failed with HTTP ${response.status}. Check VITE_API_URL and backend logs.`)
+        throw new Error(`Backend request failed with HTTP ${response.status}. Check ${API_BASE_URL} and backend logs.`)
       }
       throw new Error(raw?.slice(0, 180) || `HTTP ${response.status}`)
     }

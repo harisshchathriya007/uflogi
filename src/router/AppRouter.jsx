@@ -17,6 +17,7 @@ import ProofOfDelivery from '../pages/ProofOfDelivery'
 import DriverEarnings from '../pages/DriverEarnings'
 import VehicleInfo from '../pages/VehicleInfo'
 import CompletedDeliveries from '../pages/CompletedDeliveries'
+import ApiTest from '../pages/ApiTest'
 
 export default function AppRouter() {
   return (
@@ -40,6 +41,7 @@ export default function AppRouter() {
         <Route path="/earnings" element={<DriverEarnings />} />
         <Route path="/vehicle-type" element={<VehicleInfo />} />
         <Route path="/completed" element={<CompletedDeliveries />} />
+        <Route path="/api-test" element={<ApiTest />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>
