@@ -1,4 +1,47 @@
-import { supabase } from './supabaseClient'
+import {
+  getSupabaseUnavailableReason,
+  isSupabaseAvailable,
+  isSupabaseNetworkError,
+  markSupabaseUnavailable,
+  supabase,
+} from './supabaseClient'
+
+function createSupabaseUnavailableError() {
+  return new Error(getSupabaseUnavailableReason() || 'Supabase unavailable')
+}
+
+function isUnavailableError(error) {
+  return isSupabaseNetworkError(error)
+}
+
+async function runSupabaseQuery(executor) {
+  if (!isSupabaseAvailable()) return { data: null, error: createSupabaseUnavailableError() }
+  try {
+    const result = await executor()
+    if (result?.error && isUnavailableError(result.error)) {
+      markSupabaseUnavailable(result.error)
+      return { data: null, error: createSupabaseUnavailableError() }
+    }
+    return result
+  } catch (error) {
+    if (isUnavailableError(error)) {
+      markSupabaseUnavailable(error)
+      return { data: null, error: createSupabaseUnavailableError() }
+    }
+    throw error
+  }
+}
+
+function subscribeWithGuard(channelName, buildChannel) {
+  if (!isSupabaseAvailable()) return null
+  const channel = buildChannel()
+  return channel.subscribe((status, error) => {
+    if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+      markSupabaseUnavailable(error || `Realtime subscription failed for ${channelName}.`)
+      if (supabase) supabase.removeChannel(channel)
+    }
+  })
+}
 
 function isMissingResourceError(error) {
   if (!error) return false
@@ -9,11 +52,11 @@ function isMissingResourceError(error) {
 }
 
 async function queryFirstTable(tableNames, queryBuilder) {
-  if (!supabase) return { data: null, table: null, error: new Error('Supabase unavailable') }
+  if (!isSupabaseAvailable()) return { data: null, table: null, error: createSupabaseUnavailableError() }
   let firstNonMissingError = null
   let lastError = null
   for (const tableName of tableNames) {
-    const { data, error } = await queryBuilder(supabase.from(tableName))
+    const { data, error } = await runSupabaseQuery(() => queryBuilder(supabase.from(tableName)))
     if (!error) return { data, table: tableName, error: null }
     lastError = error
     if (!isMissingResourceError(error) && !firstNonMissingError) firstNonMissingError = error
@@ -22,11 +65,11 @@ async function queryFirstTable(tableNames, queryBuilder) {
 }
 
 async function mutateFirstTable(tableNames, mutateBuilder) {
-  if (!supabase) return { data: null, table: null, error: new Error('Supabase unavailable') }
+  if (!isSupabaseAvailable()) return { data: null, table: null, error: createSupabaseUnavailableError() }
   let firstNonMissingError = null
   let lastError = null
   for (const tableName of tableNames) {
-    const { data, error } = await mutateBuilder(supabase.from(tableName))
+    const { data, error } = await runSupabaseQuery(() => mutateBuilder(supabase.from(tableName)))
     if (!error) return { data, table: tableName, error: null }
     lastError = error
     if (!isMissingResourceError(error) && !firstNonMissingError) firstNonMissingError = error
@@ -67,16 +110,16 @@ export async function updateOrder(orderId, patch) {
 }
 
 export async function upsertCompletedDelivery(order) {
-  if (!supabase) return
+  if (!isSupabaseAvailable()) return
   const orderKey = order?.id ?? order?.order_id
   if (!orderKey) return
-  await supabase.from('completed_deliveries').upsert({
+  await runSupabaseQuery(() => supabase.from('completed_deliveries').upsert({
     order_id: orderKey,
     driver_email: order.driver_email,
     completed_at: order.completed_at || new Date().toISOString(),
     commodity: order.commodity,
     earnings: order.earnings,
-  }, { onConflict: 'order_id' })
+  }, { onConflict: 'order_id' }))
 }
 
 export async function fetchDrivers() {
@@ -102,7 +145,7 @@ export async function computeRouteDistanceKm(order) {
 }
 
 export async function triggerDriverSos(email) {
-  if (!supabase || !email) return false
+  if (!isSupabaseAvailable() || !email) return false
   const exists = await queryFirstTable(['drivers', 'Driver'], (table) =>
     table
       .select('id')
@@ -124,7 +167,7 @@ export async function triggerDriverSos(email) {
     activeColumns.forEach((column) => {
       payload[column] = basePayload[column]
     })
-    const { error } = await supabase.from(tableName).update(payload).eq('email', email)
+    const { error } = await runSupabaseQuery(() => supabase.from(tableName).update(payload).eq('email', email))
     writeError = error
     if (!writeError) return true
     const missingColumn = extractMissingColumnName(writeError.message)
@@ -136,12 +179,12 @@ export async function triggerDriverSos(email) {
 }
 
 export async function fetchCompletedForDriver(email) {
-  if (!supabase) return []
-  const { data, error } = await supabase
+  if (!isSupabaseAvailable()) return []
+  const { data, error } = await runSupabaseQuery(() => supabase
     .from('completed_deliveries')
     .select('*')
     .eq('driver_email', email)
-    .order('completed_at', { ascending: false })
+    .order('completed_at', { ascending: false }))
 
   if (!error && data && data.length > 0) return data
 
@@ -156,9 +199,9 @@ export async function fetchCompletedForDriver(email) {
 }
 
 export function subscribeCompletedRealtime(email, onChange) {
-  if (!supabase) return null
+  if (!isSupabaseAvailable()) return null
   const normalizedEmail = String(email || '').toLowerCase()
-  return supabase
+  return subscribeWithGuard(`completed-realtime-${normalizedEmail}`, () => supabase
     .channel(`completed-realtime-${normalizedEmail}`)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'completed_deliveries' }, (payload) => {
       const row = payload.new || payload.old
@@ -171,7 +214,7 @@ export function subscribeCompletedRealtime(email, onChange) {
       if (String(row.status || '').toLowerCase() !== 'completed') return
       onChange()
     })
-    .subscribe()
+  )
 }
 
 export function removeRealtimeChannel(channel) {
@@ -179,21 +222,21 @@ export function removeRealtimeChannel(channel) {
 }
 
 export function subscribeOrdersRealtime(onChange) {
-  if (!supabase) return null
-  return supabase
+  if (!isSupabaseAvailable()) return null
+  return subscribeWithGuard('orders-realtime', () => supabase
     .channel('orders-realtime')
     .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, onChange)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'Orders' }, onChange)
-    .subscribe()
+  )
 }
 
 export function subscribeDriversRealtime(onChange) {
-  if (!supabase) return null
-  return supabase
+  if (!isSupabaseAvailable()) return null
+  return subscribeWithGuard('drivers-realtime', () => supabase
     .channel('drivers-realtime')
     .on('postgres_changes', { event: '*', schema: 'public', table: 'drivers' }, onChange)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'Driver' }, onChange)
-    .subscribe()
+  )
 }
 
 export function extractMissingColumnName(message) {
@@ -212,7 +255,7 @@ export function extractMissingColumnName(message) {
 }
 
 export async function registerDriverAdaptive(basePayload) {
-  if (!supabase) return { ok: false }
+  if (!isSupabaseAvailable()) return { ok: false }
   const tableCandidates = ['drivers', 'Driver']
   for (const tableName of tableCandidates) {
     let activeColumns = Object.keys(basePayload)
@@ -221,7 +264,7 @@ export async function registerDriverAdaptive(basePayload) {
       activeColumns.forEach((column) => {
         payload[column] = basePayload[column]
       })
-      const { error } = await supabase.from(tableName).insert(payload)
+      const { error } = await runSupabaseQuery(() => supabase.from(tableName).insert(payload))
       if (!error) return { ok: true, table: tableName }
 
       const missingColumn = extractMissingColumnName(error.message)
@@ -323,7 +366,7 @@ function toDbOrderPayload(row) {
 }
 
 export async function importOrdersAdaptive(normalizedRows) {
-  if (!supabase) return { ok: false, error: new Error('Supabase unavailable') }
+  if (!isSupabaseAvailable()) return { ok: false, error: createSupabaseUnavailableError() }
   if (!normalizedRows || normalizedRows.length === 0) return { ok: false, error: new Error('No rows to import') }
   const dbRows = normalizedRows.map((row) => toDbOrderPayload(row))
   const tableCandidates = ['orders', 'Orders']
@@ -347,16 +390,16 @@ export async function importOrdersAdaptive(normalizedRows) {
         && rowsForTable.every((row) => Boolean(row.order_id))
 
       if (allHaveOrderId) {
-        const upsertResp = await supabase.from(tableName).upsert(rowsForTable, { onConflict: 'order_id' })
+        const upsertResp = await runSupabaseQuery(() => supabase.from(tableName).upsert(rowsForTable, { onConflict: 'order_id' }))
         writeError = upsertResp.error
         const onConflictUnsupported = writeError
           && /on conflict|42P10|no unique|constraint|pgrst100|parse/i.test(String(writeError.message || ''))
         if (onConflictUnsupported) {
-          const insertResp = await supabase.from(tableName).insert(rowsForTable)
+          const insertResp = await runSupabaseQuery(() => supabase.from(tableName).insert(rowsForTable))
           writeError = insertResp.error
         }
       } else {
-        const insertResp = await supabase.from(tableName).insert(rowsForTable)
+        const insertResp = await runSupabaseQuery(() => supabase.from(tableName).insert(rowsForTable))
         writeError = insertResp.error
       }
 
